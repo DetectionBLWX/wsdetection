@@ -32,21 +32,25 @@ class VGG(nn.Module):
         'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
         'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
     }
-    def __init__(self, arch, in_channels=3, norm_cfg=None, outstride=8, **kwargs):
-        self.features = self.makelayers(self.archs_dict[arch], in_channels, outstride, norm_cfg=norm_cfg)
+    def __init__(self, arch, in_channels=3, outstride=8, norm_cfg=None, act_cfg=None, **kwargs):
+        super(VGG, self).__init__()
+        self.features = self.makelayers(self.archs_dict[arch], in_channels, outstride, norm_cfg=norm_cfg, act_cfg=act_cfg)
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
         self.classifier = nn.Sequential(
             nn.Linear(512 * 7 * 7, 4096),
-            nn.ReLU(True),
+            BuildActivation(act_cfg['type'], **act_cfg['opts']),
             nn.Linear(4096, 4096),
-            nn.ReLU(True),
+            BuildActivation(act_cfg['type'], **act_cfg['opts']),
         )
     '''forward'''
     def forward(self, x):
         x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
         return x
     '''make layers for vgg'''
-    def makelayers(self, cfg, in_channels, outstride, norm_cfg=None):
+    def makelayers(self, cfg, in_channels, outstride, norm_cfg=None, act_cfg=None):
         layers, stride, dilation = [], 1, 1
         for v in cfg:
             if v == 'M':
@@ -61,7 +65,7 @@ class VGG(nn.Module):
                 if norm_cfg is None:
                     layers += [conv2d, BuildActivation('relu', **{'inplace': True})]
                 else:
-                    layers += [conv2d, BuildNormalization(norm_cfg['type'], (v, norm_cfg['opts'])), BuildActivation('relu', **{'inplace': True})]
+                    layers += [conv2d, BuildNormalization(norm_cfg['type'], (v, norm_cfg['opts'])), BuildActivation(act_cfg['type'], **act_cfg['opts'])]
                 in_channels = v
         return nn.Sequential(*layers)
 
@@ -91,6 +95,8 @@ def BuildVGG(vgg_type, **kwargs):
     }
     if vgg_type.endswith('bn'):
         assert 'norm_cfg' in kwargs, 'norm_cfg should be specified if use %s...' % vgg_type
+    else:
+        del kwargs['norm_cfg']
     for key, value in kwargs.items():
         if key in default_args:
             default_args.update({

@@ -9,7 +9,7 @@ DATASET_CFG['train'].update(
         'type': 'voc',
         'rootdir': 'data/VOCdevkit/VOC2007',
         'proposal_cfg': {
-            'filepath': None,
+            'filepath': 'selective_search_data/voc_2007_trainval.mat',
         }
     }
 )
@@ -18,7 +18,7 @@ DATASET_CFG['test'].update(
         'type': 'voc',
         'rootdir': 'data/VOCdevkit/VOC2007',
         'proposal_cfg': {
-            'filepath': None,
+            'filepath': 'selective_search_data/voc_2007_test.mat',
         }
     }
 )

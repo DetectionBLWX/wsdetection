@@ -5,6 +5,9 @@ Author:
     Zhenchao Jin
 '''
 import os
+import cv2
+import torch
+import numpy as np
 import pandas as pd
 import xml.etree.ElementTree as ET
 from .base import BaseDataset
@@ -13,7 +16,7 @@ from chainercv.evaluations import eval_detection_voc
 
 '''voc dataset'''
 class VOCDataset(BaseDataset):
-    num_classes = 21
+    num_classes = 20
     classnames = [
         'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable', 
         'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor',
@@ -21,11 +24,11 @@ class VOCDataset(BaseDataset):
     assert num_classes == len(classnames)
     def __init__(self, mode, logger_handle, dataset_cfg, **kwargs):
         super(VOCDataset, self).__init__(mode, logger_handle, dataset_cfg, **kwargs)
-        assert dataset_cfg['type'] in ['VOC07', 'VOC12', 'VOC0712']
-        df = pd.read_csv(os.path.join(self.set_dir, dataset_cfg['set']+'.txt'), names=['imageids'])
-        self.imageids = [str(_id) for _id in df['imageids'].values()]
-        self.imagepaths = [os.path.join(dataset_cfg['rootdir'], 'JPEGImages', f'{imageid}.jpg') for imageid in self.imageids]
-        self.annpaths = [os.path.join(dataset_cfg['rootdir'], 'Annotations', f'{imageid}.xml') for imageid in self.imageids]
+        rootdir = dataset_cfg['rootdir']
+        df = pd.read_csv(os.path.join(rootdir, 'ImageSets/Main', dataset_cfg['set']+'.txt'), names=['imageids'])
+        self.imageids = [str(_id).zfill(6) for _id in df['imageids'].values]
+        self.imagepaths = [os.path.join(rootdir, 'JPEGImages', f'{imageid}.jpg') for imageid in self.imageids]
+        self.annpaths = [os.path.join(rootdir, 'Annotations', f'{imageid}.xml') for imageid in self.imageids]
         self.proposals_dict = self.loadproposals(dataset_cfg['proposal_cfg'])
         if self.proposals_dict is not None: assert len(self.proposals_dict) == len(self.imageids)
     '''pull item'''
@@ -47,6 +50,9 @@ class VOCDataset(BaseDataset):
                 gt_boxes.append(gt_box)
                 gt_labels.append(self.classnames.index(obj.find('name').text))
         gt_boxes, gt_labels = np.stack(gt_boxes).astype(np.float32), np.stack(gt_labels).astype(np.int32)
+        # convert gt_labels for wsod
+        gt_labels_wsod = np.zeros(self.num_classes)
+        for label in gt_labels: gt_labels_wsod[label] = 1
         # read proposals
         proposals = torch.zeros(1, 4)
         if hasattr(self, 'proposals_dict') and self.proposals_dict is not None:
@@ -62,12 +68,14 @@ class VOCDataset(BaseDataset):
             sample.update({
                 'gt_boxes': gt_boxes,
                 'gt_labels': gt_labels,
+                'gt_labels_wsod': gt_labels_wsod,
             })
         sample = self.synctransform(sample, transform_type='without_totensor_normalize_pad')
         if self.mode == 'TEST':
             sample.update({
-                'gt_boxes', gt_boxes,
+                'gt_boxes': gt_boxes,
                 'gt_labels': gt_labels,
+                'gt_labels_wsod': gt_labels_wsod,
             })
         sample = self.synctransform(sample, transform_type='only_totensor_normalize_pad')
         # return sample

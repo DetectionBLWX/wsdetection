@@ -24,7 +24,7 @@ class BaseModel(nn.Module):
         self.norm_cfg, self.act_cfg = cfg['norm_cfg'], cfg['act_cfg']
         # build backbone_net
         backbone_cfg = copy.deepcopy(cfg['backbone'])
-        backbone_cfg.update({'norm_cfg': norm_cfg})
+        backbone_cfg.update({'norm_cfg': self.norm_cfg})
         backbone_net = BuildBackbone(backbone_cfg)
         if backbone_cfg['series'] in ['vgg']:
             self.backbone_net_stage1 = backbone_net.features
@@ -39,8 +39,10 @@ class BaseModel(nn.Module):
         head_cfg = copy.deepcopy(cfg['head'])
         head_cfg.update({'num_classes': cfg['num_classes']})
         self.buildhead(head_cfg)
+        # freeze norm layer
+        if cfg.get('is_freeze_norm', True): self.freezenormalization()
     '''forward'''
-    def forward(self, x, proposals, targets=None):
+    def forward(self, x, proposals, targets=None, losses_cfg=None):
         raise NotImplementedError('not to be implemented')
     '''build head'''
     def buildhead(self, cfg):
@@ -48,8 +50,8 @@ class BaseModel(nn.Module):
     '''return all layers with learnable parameters'''
     def alllayers(self):
         raise NotImplementedError('not to be implemented')
-    '''freeze normalization layer'''
-    def freezenormlayer(self):
+    '''freeze normalization'''
+    def freezenormalization(self):
         for module in self.modules():
             if type(module) in BuildNormalization(only_get_all_supported=True):
                 module.eval()
@@ -88,22 +90,13 @@ class BaseModel(nn.Module):
             'sigmoidfocalloss': SigmoidFocalLoss,
             'binaryceloss': BinaryCrossEntropyLoss,
         }
-        # format prediction
-        if prediction.dim() == 4:
-            prediction = prediction.permute((0, 2, 3, 1)).contiguous()
-        elif prediction.dim() == 3:
-            prediction = prediction.permute((0, 2, 1)).contiguous()
-        prediction = prediction.view(-1, prediction.size(-1))
         # calculate the loss
         loss = 0
         for key, value in loss_cfg.items():
             assert key in supported_losses, 'unsupport loss type %s...' % key
-            target_iter = target.view(-1)
-            if (key in ['binaryceloss']) and hasattr(self, 'onehot'):
-                target_iter = self.onehot(target, self.cfg['num_classes'])
             loss += supported_losses[key](
                 prediction=prediction, 
-                target=target_iter, 
+                target=target, 
                 scale_factor=value['scale_factor'],
                 **value['opts']
             )

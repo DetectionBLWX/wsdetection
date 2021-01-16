@@ -82,9 +82,14 @@ LOSSES_CFG = {
 }
 # config for model
 MODEL_CFG = {
+    'type': 'oicr',
     'num_classes': -1,
+    'benchmark': True,
+    'is_multi_gpus': True,
     'norm_cfg': {'type': 'batchnorm2d', 'opts': {}},
+    'distributed': {'is_on': True, 'backend': 'nccl'},
     'act_cfg': {'type': 'relu', 'opts': {'inplace': True}},
+    'is_freeze_norm': True,
     'backbone': {
         'type': 'vgg16',
         'series': 'vgg',

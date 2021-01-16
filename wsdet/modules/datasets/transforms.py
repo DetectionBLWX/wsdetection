@@ -13,7 +13,7 @@ import numpy as np
 '''resize image'''
 class Resize(object):
     def __init__(self, output_size=None, output_size_list=None, keep_ratio=True, bbox_clip_border=True, interpolation='bilinear'):
-        assert (self.output_size is None) or (self.output_size_list is None)
+        assert (output_size is None) or (output_size_list is None)
         if isinstance(output_size, int):
             self.output_size = (output_size, output_size)
         else:
@@ -32,7 +32,7 @@ class Resize(object):
     '''call'''
     def __call__(self, sample):
         for key in ['image', 'gt_bboxes', 'proposals']:
-            if key in ['image']:
+            if (key in ['image']) and (key in sample):
                 image = sample[key].copy()
                 output_size = self.output_size if self.output_size is not None else random.choice(self.output_size_list)
                 image, scale_factor = self.resizeimage(
@@ -45,7 +45,7 @@ class Resize(object):
                     key: image,
                     'scale_factor': scale_factor,
                 })
-            elif key in ['gt_bboxes', 'proposals']:
+            elif (key in ['gt_bboxes', 'proposals']) and (key in sample):
                 assert 'scale_factor' in sample
                 bboxes = sample[key].copy()
                 bboxes = self.resizebboxes(
@@ -197,7 +197,7 @@ class ToTensor(object):
         for key in sample.keys():
             if key in ['image']:
                 sample[key] = torch.from_numpy((sample[key].transpose((2, 0, 1))).astype(np.float32))
-            elif key in ['gt_bboxes', 'gt_labels', 'proposals']:
+            elif key in ['gt_bboxes', 'gt_labels', 'gt_labels_wsod', 'proposals']:
                 sample[key] = torch.from_numpy(sample[key].astype(np.float32))
         return sample          
 
@@ -242,7 +242,7 @@ class Padding(object):
 '''wrap the transforms'''
 class Compose(object):
     def __init__(self, transforms):
-        self.transforms
+        self.transforms = transforms
     '''call'''
     def __call__(self, sample, transform_type):
         if transform_type == 'without_totensor_normalize_pad':

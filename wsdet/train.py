@@ -103,6 +103,11 @@ class Trainer():
             # --set train
             model.train()
             if cfg.MODEL_CFG['distributed']['is_on']: dataloader.sampler.set_epoch(epoch)
+            if cfg.MODEL_CFG.get('is_freeze_norm', True):
+                if cfg.MODEL_CFG['is_multi_gpus']:
+                    model.module.freezenormalization()
+                else:
+                    model.freezenormalization()
             # --adjust lr if necessary
             if optimizer_cfg['adjust_period'] == 'epoch':
                 optimizer_cfg['policy']['opts'].update({'num_iters': num_iters, 'max_iters': max_iters, 'num_epochs': epoch})
@@ -114,9 +119,13 @@ class Trainer():
                 if optimizer_cfg['adjust_period'] == 'iteration':
                     optimizer_cfg['policy']['opts'].update({'num_iters': num_iters, 'max_iters': max_iters, 'num_epochs': epoch})
                     learning_rate = adjustLearningRate(optimizer, optimizer_cfg)
-                images, targets = samples['image'].type(FloatTensor), {'segmentation': samples['segmentation'].type(FloatTensor), 'edge': samples['edge'].type(FloatTensor)}
+                images = samples['image'].type(FloatTensor)
+                proposals = samples['proposals'].type(FloatTensor)
+                targets = {
+                    'gt_labels': samples['gt_labels_wsod'].type(FloatTensor), 
+                }
                 optimizer.zero_grad()
-                loss, losses_log_dict = model(images, targets, cfg.LOSSES_CFG)
+                loss, losses_log_dict = model(images, proposals, targets, cfg.LOSSES_CFG)
                 if not distributed_cfg['is_on']:
                     loss = loss.mean()
                     for key, value in losses_log_dict.items():
